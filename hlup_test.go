@@ -167,7 +167,7 @@ func Test_Hlup(t *testing.T) {
 			},
 			{
 				name:        "with part of restricted word",
-				input:       "idiomatic go  hell",
+				input:       "idiomatic go hell",
 				shouldMatch: true,
 				span:        []span.Span{span.NewSpan(10, 11), span.NewSpan(0, 8)},
 			},
