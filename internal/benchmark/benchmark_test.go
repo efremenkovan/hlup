@@ -105,7 +105,7 @@ func BenchmarkCompileLexedExpression(b *testing.B) {
 			b.ResetTimer()
 
 			for b.Loop() {
-				parser.Parse(bm.input)
+				_, _ = parser.Parse(bm.input)
 			}
 		})
 	}
@@ -137,7 +137,7 @@ func BenchmarkCompileExpressionString(b *testing.B) {
 			b.ResetTimer()
 
 			for b.Loop() {
-				hlup.CompileExpression(bm.input)
+				_, _ = hlup.CompileExpression(bm.input)
 			}
 		})
 	}
