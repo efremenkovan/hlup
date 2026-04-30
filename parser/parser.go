@@ -30,6 +30,9 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 	currentNestLevel := 0
 
 	for tokenIdx, token := range input {
+		if currentNode == nil {
+			break
+		}
 		isLastToken := tokenIdx == len(input)-1
 
 		switch token.Kind() {
@@ -41,6 +44,11 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 			// We are already inside quoted literal sequence, just return
 			if currentNode.Kind() == nodeKindLeaf {
 				currentNode = currentNode.Parent()
+
+				// We have to exit not node when we inserted a token into it
+				if currentNode.Kind() == nodeKindNOT {
+					currentNode = currentNode.Parent()
+				}
 				continue
 			}
 
@@ -53,6 +61,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 
 		case lexer.TokenKindLPar:
 			node := newNode()
+			node.WithSpan(token.Span())
 			node.WithParent(currentNode)
 			if err := currentNode.Insert(node); err != nil {
 				return nil, newParserError(fmt.Errorf("%w: %w", ErrInsertChildToNode, err), token.Span())
@@ -65,7 +74,13 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 				return nil, newParserError(ErrInvalidSyntaxUnbalancedParentheses, token.Span())
 			}
 
+			currentNode.WithSpan(span.NewSpan(currentNode.Span().Start, token.Span().End))
 			currentNestLevel -= 1
+
+			// We have to exit not node when we inserted a token into it
+			if currentNode.Kind() == nodeKindNOT {
+				currentNode = currentNode.Parent()
+			}
 			currentNode = currentNode.Parent()
 
 		case lexer.TokenKindLiteral:
@@ -88,6 +103,11 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 				return nil, newParserError(err, token.Span())
 			}
 
+			// We have to exit not node when we inserted a token into it
+			if currentNode.Kind() == nodeKindNOT {
+				currentNode = currentNode.Parent()
+			}
+
 		case lexer.TokenKindKeywordNOT:
 			if isLastToken {
 				return nil, newParserError(ErrInvalidSyntaxNotNoFollowingExpr, token.Span())
@@ -101,12 +121,14 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 
 			if currentNode.IsRoot() && currentNode.IsEmpty() {
 				currentNode.WithKind(nodeKindNOT)
+				currentNode.WithSpan(token.Span())
 				continue
 			}
 
 			node := newNode()
 			node.WithKind(nodeKindNOT)
 			node.WithParent(currentNode)
+			node.WithSpan(token.Span())
 			if err := currentNode.Insert(node); err != nil {
 				return nil, newParserError(fmt.Errorf("%w: %w", ErrInsertChildToNode, err), token.Span())
 			}
@@ -119,6 +141,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 				}
 
 				currentNode.WithKind(nodeKindOR)
+				currentNode.WithSpan(token.Span())
 
 				if isLastToken {
 					return nil, newParserError(ErrInvalidSyntaxOrNoRightExpr, token.Span())
@@ -135,6 +158,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 
 			node := currentNode.CloneDetached()
 			node.WithParent(currentNode)
+			node.WithSpan(token.Span())
 
 			currentNode.ClearContent()
 			currentNode.WithKind(nodeKindOR)
@@ -148,6 +172,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 					return nil, newParserError(ErrInvalidSyntaxAndNoLeftExpr, token.Span())
 				}
 				currentNode.WithKind(nodeKindAND)
+				currentNode.WithSpan(token.Span())
 
 				if isLastToken {
 					return nil, newParserError(ErrInvalidSyntaxAndNoRightExpr, token.Span())
@@ -163,6 +188,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 
 			node := currentNode.CloneDetached()
 			node.WithParent(currentNode)
+			node.WithSpan(token.Span())
 
 			currentNode.ClearContent()
 			currentNode.WithKind(nodeKindAND)
@@ -180,7 +206,7 @@ func (p *parser) Parse(input lexer.TokenStream) (expression.Expression, error) {
 
 	expr, err := rootNode.ToExpression()
 	if err != nil {
-		return nil, newParserError(fmt.Errorf("%w: %w", ErrInvalidSyntax, err), span.NewSpan(input[0].Span().Start, input[len(input)-1].Span().End))
+		return nil, err
 	}
 
 	return expr, nil

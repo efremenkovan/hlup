@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/efremenkovan/hlup/expression"
@@ -397,7 +396,7 @@ func Test_Parse(t *testing.T) {
 			input: lexer.TokenStream{
 				l("one", span.NewSpan(0, 2)),
 			},
-			expectedErr: newParserError(fmt.Errorf("%w: %w", ErrInvalidSyntax, ErrToExpressionUnknownNodeKind), span.NewSpan(0, 2)),
+			expectedErr: newParserError(ErrToExpressionUnknownNodeKind, span.NewSpan(0, 2)),
 		},
 
 		{
@@ -444,7 +443,7 @@ func Test_Parse(t *testing.T) {
 				lp(span.NewSpan(0, 0)),
 				rp(span.NewSpan(1, 1)),
 			},
-			expectedErr: newParserError(fmt.Errorf("%w: %w", ErrInvalidSyntax, ErrToExpressionUnknownNodeKind), span.NewSpan(0, 1)),
+			expectedErr: newParserError(ErrToExpressionUnknownNodeKind, span.NewSpan(0, 1)),
 		},
 		{
 			name: "standalone and keyword",

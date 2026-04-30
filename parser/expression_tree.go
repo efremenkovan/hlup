@@ -84,12 +84,44 @@ func newNode() iNode {
 func (n *node) Span() span.Span {
 	switch n.kind {
 	case nodeKindNOT:
-		return span.NewSpan(n.span.Start, n.lNode.Span().End)
+		var right int
+		if n.lNode != nil {
+			right = n.lNode.Span().End
+		} else {
+			right = n.span.End
+		}
+		return span.NewSpan(n.span.Start, right)
 	case nodeKindAND, nodeKindOR:
-		return span.NewSpan(n.lNode.Span().Start, n.rNode.Span().End)
+		var left int
+		if n.lNode != nil {
+			left = n.lNode.Span().Start
+		} else {
+			left = n.span.Start
+		}
+
+		var right int
+		if n.rNode != nil {
+			right = n.rNode.Span().End
+		} else {
+			right = n.span.End
+		}
+		return span.NewSpan(left, right)
 	}
 
-	return n.span
+	// nodeKindUnknown: derive span from stored span and children
+	left := n.span.Start
+	right := n.span.End
+	if n.lNode != nil {
+		if end := n.lNode.Span().End; end > right {
+			right = end
+		}
+	}
+	if n.rNode != nil {
+		if end := n.rNode.Span().End; end > right {
+			right = end
+		}
+	}
+	return span.NewSpan(left, right)
 }
 
 func (n *node) WithSpan(span span.Span) {
@@ -133,8 +165,16 @@ func (n *node) Right() iNode {
 }
 
 func (n *node) CloneDetached() iNode {
-	node := newNode()
-	node.WithKind(n.kind)
+	node := &node{
+		parent: nil,
+		kind:   n.kind,
+
+		span: n.span,
+
+		lNode: nil,
+		rNode: nil,
+	}
+
 	if n.lNode != nil {
 		n.lNode.WithParent(node)
 		_ = node.Insert(n.lNode)
@@ -168,11 +208,12 @@ func (n *node) Insert(node iNode) error {
 	return ErrTreeInsertIntoFullNode
 }
 
-func (n node) ToExpression() (expression.Expression, error) {
+func (n *node) ToExpression() (expression.Expression, error) {
 	switch n.kind {
 	case nodeKindNOT:
 		if n.lNode == nil {
-			return nil, ErrToExpressionNoLeftNode
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionNoLeftNode, span)
 		}
 
 		expr, err := n.lNode.ToExpression()
@@ -185,10 +226,12 @@ func (n node) ToExpression() (expression.Expression, error) {
 		}, nil
 	case nodeKindAND:
 		if n.lNode == nil {
-			return nil, ErrToExpressionNoLeftNode
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionNoLeftNode, span)
 		}
 		if n.rNode == nil {
-			return nil, ErrToExpressionNoRightNode
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionNoRightNode, span)
 		}
 
 		lExpr, err := n.lNode.ToExpression()
@@ -207,10 +250,12 @@ func (n node) ToExpression() (expression.Expression, error) {
 		}, nil
 	case nodeKindOR:
 		if n.lNode == nil {
-			return nil, ErrToExpressionNoLeftNode
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionNoLeftNode, span)
 		}
 		if n.rNode == nil {
-			return nil, ErrToExpressionNoRightNode
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionNoRightNode, span)
 		}
 
 		lExpr, err := n.lNode.ToExpression()
@@ -232,18 +277,21 @@ func (n node) ToExpression() (expression.Expression, error) {
 	case nodeKindUnknown:
 		// (...) can only result with single left child node. Other variants are unknown behavior
 		if (n.lNode == nil && n.rNode == nil) || (n.lNode != nil && n.rNode != nil) {
-			return nil, ErrToExpressionUnknownNodeKind
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionUnknownNodeKind, span)
 		}
 
 		switch n.lNode.Kind() {
 		case nodeKindUnknown, nodeKindLeaf:
-			return nil, ErrToExpressionUnknownNodeKind
+			span := n.Span()
+			return nil, newParserError(ErrToExpressionUnknownNodeKind, span)
 		}
 
 		return n.lNode.ToExpression()
 	}
 
-	return nil, ErrToExpressionUnknownNodeKind
+	span := n.Span()
+	return nil, newParserError(ErrToExpressionUnknownNodeKind, span)
 }
 
 type leaf struct {
